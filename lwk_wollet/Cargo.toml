@@ -42,7 +42,7 @@ reqwest = { version = "0.12", optional = true, default-features = false, feature
     "json",
     "rustls-tls",
 ] }
-tokio_with_wasm = { version = "=0.8.2", features = [
+tokio_with_wasm = { version = "0.8.7", features = [
     "time",
 ] }
 
