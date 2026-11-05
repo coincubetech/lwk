@@ -1,8 +1,16 @@
 on:
-  push:
+  pull_request:
     branches:
       - master
-  pull_request: {}
+      - redesign
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+      - edited
+      - converted_to_draft
+  workflow_dispatch:
 
 name: Build python wheels on mac and windows
 
@@ -10,6 +18,7 @@ jobs:
 
 
   linux-wheels:
+    if: ${{ (github.event_name != 'pull_request' || (!github.event.pull_request.draft && (github.event.action != 'edited' || github.event.changes.base != null))) }}
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
@@ -25,41 +34,46 @@ jobs:
 
 
   osx-wheels:
+    if: ${{ (github.event_name != 'pull_request' || (!github.event.pull_request.draft && (github.event.action != 'edited' || github.event.changes.base != null))) }}
     strategy:
       matrix:
         os: ["macos-14"]
     runs-on: ${{ matrix.os }}
     steps:
-     - uses: actions/checkout@v4
-     - uses: dtolnay/rust-toolchain@1.85.0
-       with:
-         components: "clippy,rust-src,rustfmt" # required by maturin build
-     - uses: actions/setup-python@v5
-       with:
-         python-version: "3.12"
-     - run: python3 -m pip install maturin
-     - run: python3 -m pip install uniffi-bindgen==0.29.5  # must be the same version as the dep in lwk_bindings/Cargo.toml
-     - run: maturin build --release -m lwk_bindings/Cargo.toml -b uniffi
-     - uses: actions/upload-artifact@v4
-       with:
-         name: osx-wheel-${{ matrix.os }}
-         path: target/wheels
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.85.0
+        with:
+          components: "clippy,rust-src,rustfmt" # required by maturin build
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python3 -m pip install maturin
+      - run: python3 -m pip install uniffi-bindgen==0.29.5 # must be the same version as the dep in lwk_bindings/Cargo.toml
+      - run: maturin build --release -m lwk_bindings/Cargo.toml -b uniffi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: osx-wheel-${{ matrix.os }}
+          path: target/wheels
 
   windows-wheels:
+    if: ${{ (github.event_name != 'pull_request' || (!github.event.pull_request.draft && (github.event.action != 'edited' || github.event.changes.base != null))) }}
     runs-on: windows-latest
     steps:
-     - uses: actions/checkout@v4
-     - uses: dtolnay/rust-toolchain@1.85.0
-       with:
-         components: "clippy,rust-src,rustfmt" # required by maturin build
-     - uses: actions/setup-python@v5
-       with:
-         python-version: "3.12"
-     - run: python3 -m pip install maturin
-     - run: python3 -m pip install uniffi-bindgen==0.29.5  # must be the same version as the dep in lwk_bindings/Cargo.toml
-     - run: maturin build --release -m lwk_bindings/Cargo.toml -b uniffi
-     - uses: actions/upload-artifact@v4
-       with:
-         name: windows-wheels
-         path: target/wheels
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.85.0
+        with:
+          components: "clippy,rust-src,rustfmt" # required by maturin build
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python3 -m pip install maturin
+      - run: python3 -m pip install uniffi-bindgen==0.29.5 # must be the same version as the dep in lwk_bindings/Cargo.toml
+      - run: maturin build --release -m lwk_bindings/Cargo.toml -b uniffi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-wheels
+          path: target/wheels
 
+concurrency:
+  group: batch-${{ github.workflow }}-${{ github.ref }}-${{ github.event.action == 'edited' && github.event.changes.base == null && github.run_id || 'candidate' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}

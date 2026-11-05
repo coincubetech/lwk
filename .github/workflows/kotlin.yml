@@ -1,16 +1,26 @@
 on:
   push:
-    branches:
-      - master
     tags:
       - 'bindings_*'
-  pull_request: {}
+  pull_request:
+    branches:
+      - master
+      - redesign
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+      - edited
+      - converted_to_draft
+  workflow_dispatch:
 
 name: Build & Publish framework for Kotlin library
 
 jobs:
 
   build:
+    if: ${{ (github.event_name != 'pull_request' || (!github.event.pull_request.draft && (github.event.action != 'edited' || github.event.changes.base != null))) }}
     runs-on: macos-26
     steps:
       - name: "Show default version of NDK"
@@ -54,3 +64,6 @@ jobs:
           path: lwk_bindings/android_bindings
           retention-days: 1
 
+concurrency:
+  group: batch-${{ github.workflow }}-${{ github.ref }}-${{ github.event.action == 'edited' && github.event.changes.base == null && github.run_id || 'candidate' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}

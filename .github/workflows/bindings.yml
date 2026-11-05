@@ -1,31 +1,40 @@
 on:
-  push:
+  pull_request:
     branches:
       - master
-  pull_request: {}
+      - redesign
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+      - edited
+      - converted_to_draft
+  workflow_dispatch:
 
 name: Build bindings
 
 jobs:
   build:
+    if: ${{ (github.event_name != 'pull_request' || (!github.event.pull_request.draft && (github.event.action != 'edited' || github.event.changes.base != null))) }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-22.04]
         target: [aarch64-unknown-linux-gnu]
         include:
-        - os: ubuntu-22.04
-          target: aarch64-unknown-linux-gnu
-        - os: ubuntu-22.04
-          target: x86_64-unknown-linux-gnu
-        - os: macos-14
-          target: aarch64-apple-darwin
-        - os: macos-14
-          target: x86_64-apple-darwin
-        - os: windows-2022
-          target: x86_64-pc-windows-msvc
-        - os: windows-2022
-          target: i686-pc-windows-msvc
+          - os: ubuntu-22.04
+            target: aarch64-unknown-linux-gnu
+          - os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+          - os: macos-14
+            target: aarch64-apple-darwin
+          - os: macos-14
+            target: x86_64-apple-darwin
+          - os: windows-2022
+            target: x86_64-pc-windows-msvc
+          - os: windows-2022
+            target: i686-pc-windows-msvc
     runs-on: ${{ matrix.os }}
     steps:
       - name: Install gcc-aarch64-linux-gnu
@@ -49,14 +58,14 @@ jobs:
         with:
           name: bindings-${{ matrix.target }}
           path: target/${{ matrix.target }}/release/lwk.dll
-        if:  matrix.os == 'windows-2022'
+        if: matrix.os == 'windows-2022'
 
       - name: Archive release linux
         uses: actions/upload-artifact@v4
         with:
           name: bindings-${{ matrix.target }}
           path: target/${{ matrix.target }}/release/liblwk.so
-        if:  matrix.os == 'ubuntu-22.04'
+        if: matrix.os == 'ubuntu-22.04'
 
       - name: Archive release mac
         uses: actions/upload-artifact@v4
@@ -65,9 +74,10 @@ jobs:
           path: |
             target/${{ matrix.target }}/release/liblwk.dylib
             target/${{ matrix.target }}/release/liblwk.a
-        if:  matrix.os == 'macos-14'
+        if: matrix.os == 'macos-14'
 
   build-cpp:
+    if: ${{ (github.event_name != 'pull_request' || (!github.event.pull_request.draft && (github.event.action != 'edited' || github.event.changes.base != null))) }}
     needs: build
     runs-on: ubuntu-22.04
     steps:
@@ -89,6 +99,7 @@ jobs:
           path: target/lwk*
 
   build-csharp:
+    if: ${{ (github.event_name != 'pull_request' || (!github.event.pull_request.draft && (github.event.action != 'edited' || github.event.changes.base != null))) }}
     needs: build
     runs-on: ubuntu-22.04
     steps:
@@ -110,6 +121,7 @@ jobs:
           path: target/lwk.cs
 
   build-nuget:
+    if: ${{ (github.event_name != 'pull_request' || (!github.event.pull_request.draft && (github.event.action != 'edited' || github.event.changes.base != null))) }}
     needs: build-csharp
     runs-on: ubuntu-22.04
     steps:
@@ -179,3 +191,6 @@ jobs:
         with:
           name: LiquidWalletKit.0.8.2.nupkg  # TODO make version parametric
           path: csharp/bin/Release/*.nupkg
+concurrency:
+  group: batch-${{ github.workflow }}-${{ github.ref }}-${{ github.event.action == 'edited' && github.event.changes.base == null && github.run_id || 'candidate' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
