@@ -1,8 +1,16 @@
 on:
-  push:
+  pull_request:
     branches:
       - master
-  pull_request: {}
+      - redesign
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+      - edited
+      - converted_to_draft
+  workflow_dispatch:
 
 name: Continuous Integration
 
@@ -11,6 +19,7 @@ env:
 
 jobs:
   build-test:
+    if: ${{ (github.event_name != 'pull_request' || (!github.event.pull_request.draft && (github.event.action != 'edited' || github.event.changes.base != null))) }}
     strategy:
       matrix:
         os: ["macos-14", "ubuntu-22.04", "windows-2022"]
@@ -26,6 +35,7 @@ jobs:
       - run: cargo test --lib  # integration tests requires binaries for the test env...
 
   nix:
+    if: ${{ (github.event_name != 'pull_request' || (!github.event.pull_request.draft && (github.event.action != 'edited' || github.event.changes.base != null))) }}
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
@@ -37,18 +47,20 @@ jobs:
       - run: nix build .
 
   just-swift: # swift framework is built in the lwk-swift repo, here we care `just swift` doesn't brake
-      runs-on: macos-14
-      steps:
-        - uses: actions/checkout@v4
-        - uses: dtolnay/rust-toolchain@1.85.0
-          with:
-            targets: x86_64-apple-ios,aarch64-apple-ios,aarch64-apple-ios-sim,aarch64-apple-darwin
-        - uses: extractions/setup-just@v2
-          with:
-            just-version: 1.5.0  # optional semver specification, otherwise latest
-        - run: just swift
+    if: ${{ (github.event_name != 'pull_request' || (!github.event.pull_request.draft && (github.event.action != 'edited' || github.event.changes.base != null))) }}
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.85.0
+        with:
+          targets: x86_64-apple-ios,aarch64-apple-ios,aarch64-apple-ios-sim,aarch64-apple-darwin
+      - uses: extractions/setup-just@v2
+        with:
+          just-version: 1.5.0    # optional semver specification, otherwise latest
+      - run: just swift
 
   csharp:
+    if: ${{ (github.event_name != 'pull_request' || (!github.event.pull_request.draft && (github.event.action != 'edited' || github.event.changes.base != null))) }}
     runs-on: windows-2022
     steps:
       - name: Checkout
@@ -66,3 +78,6 @@ jobs:
           name: csharp-windows
           path: target/release/csharp
 
+concurrency:
+  group: batch-${{ github.workflow }}-${{ github.ref }}-${{ github.event.action == 'edited' && github.event.changes.base == null && github.run_id || 'candidate' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
